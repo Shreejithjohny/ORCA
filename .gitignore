@@ -3,10 +3,7 @@ ORCA_Master_Playbook_v2.docx
 docx_extracted.txt
 MEMBER_A_HANDOFF.md
 
-# Member A infra artifacts (do not push from Member B)
-/k8s/
-/rbac/
-scripts/member_a_*.ps1
+# Local cluster backups and transient scripts
 snapshots/
 
 # Python env

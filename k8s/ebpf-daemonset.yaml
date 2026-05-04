@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: ebpf-tcp-connect
+  namespace: orca
+  labels:
+    app: ebpf-tcp-connect
+spec:
+  selector:
+    matchLabels:
+      app: ebpf-tcp-connect
+  template:
+    metadata:
+      labels:
+        app: ebpf-tcp-connect
+    spec:
+      serviceAccountName: ebpf-sa
+      hostNetwork: true
+      hostPID: true
+      containers:
+        - name: ebpf-agent
+          image: quay.io/iovisor/bcc:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            privileged: true
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "ebpf tcp connect daemonset initialized";
+              sleep infinity
+          env:
+            - name: REDIS_URL
+              value: redis://orca-redis.orca.svc.cluster.local:6379/0
+            - name: REDIS_STREAM_PREFIX
+              value: netflows
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: bpf-fs
+              mountPath: /sys/fs/bpf
+            - name: modules
+              mountPath: /lib/modules
+              readOnly: true
+            - name: kernel-debug
+              mountPath: /sys/kernel/debug
+      volumes:
+        - name: bpf-fs
+          hostPath:
+            path: /sys/fs/bpf
+        - name: modules
+          hostPath:
+            path: /lib/modules
+        - name: kernel-debug
+          hostPath:
+            path: /sys/kernel/debug
