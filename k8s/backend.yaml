@@ -1,0 +1,140 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: orca-backend-code
+  namespace: orca
+data:
+  app.py: |
+    from fastapi import FastAPI, Request, HTTPException
+    from pydantic import BaseModel
+    import os
+    import json
+
+    def explain_incident_safe(incident):
+        return {"explanation": "Dummy response", "confidence": 0.5, "source": "dummy"}
+
+    app = FastAPI(title="ORCA Backend")
+
+    REDIS_URL = os.getenv("REDIS_URL", "redis://orca-redis:6379/0")
+
+    class LogPayload(BaseModel):
+        _timestamp: str = None
+
+    @app.post("/ingest/logs")
+    async def ingest_logs(request: Request):
+        payload = await request.json()
+        
+        # Fluent Bit sends JSON array; unpack first element if needed
+        if isinstance(payload, list) and len(payload) > 0:
+            payload = payload[0]
+        
+        # Support both tag and data keys from Fluent Bit
+        if isinstance(payload, dict):
+            data = payload.get("event") or payload
+        else:
+            data = payload
+
+        ns = data.get("kubernetes", {}).get("namespace_name", "default") if isinstance(data, dict) else "default"
+        pod = data.get("kubernetes", {}).get("pod_name", "unknown") if isinstance(data, dict) else "unknown"
+        stream_key = f"logs:{ns}:{pod}"
+
+        try:
+            import redis.asyncio as redis_async
+
+            r = redis_async.from_url(REDIS_URL, decode_responses=True)
+            await r.xadd(stream_key, {"event": json.dumps(data)}, maxlen=1000, approximate=True)
+            return {"status": "ok", "stream": stream_key}
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=str(e))
+
+    @app.get("/health/llm")
+    async def health_llm():
+        return {"status": "ok", "model": "mistral", "available": False}
+
+    @app.post("/incident/explain")
+    async def explain(incident: dict):
+        explanation = explain_incident_safe(incident)
+        return explanation
+
+    @app.post("/nlp/explain")
+    async def nlp_explain(body: dict):
+        incident_id = body.get("incident_id")
+        if not incident_id:
+            raise HTTPException(status_code=400, detail="missing incident_id")
+
+        incident = {
+            "summary": body.get("summary", "Unknown"),
+            "severity": body.get("severity", "warning"),
+            "confidence": body.get("confidence", 0.5),
+            "timestamp": body.get("timestamp"),
+            "meta": body.get("meta", {}),
+        }
+
+        explanation = explain_incident_safe(incident)
+        return {
+            "incident_id": incident_id,
+            "summary": explanation.get("summary"),
+            "cause": explanation.get("cause"),
+            "recs": explanation.get("recs", []),
+            "confidence": explanation.get("confidence", 0.5),
+        }
+
+    if __name__ == "__main__":
+        import uvicorn
+
+        uvicorn.run(app, host="0.0.0.0", port=8000)
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orca-backend
+  namespace: orca
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orca-backend
+  template:
+    metadata:
+      labels:
+        app: orca-backend
+    spec:
+      containers:
+        - name: orca-backend
+          image: python:3.12-slim
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+          args:
+            - pip install --no-cache-dir fastapi uvicorn[standard] redis && python /app/app.py
+          env:
+            - name: REDIS_URL
+              value: "redis://orca-redis:6379/0"
+          ports:
+            - containerPort: 8000
+          volumeMounts:
+            - name: backend-code
+              mountPath: /app
+      volumes:
+        - name: backend-code
+          configMap:
+            name: orca-backend-code
+            items:
+              - key: app.py
+                path: app.py
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orca-backend
+  namespace: orca
+spec:
+  selector:
+    app: orca-backend
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP

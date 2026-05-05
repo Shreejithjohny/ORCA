@@ -10,3 +10,9 @@ snapshots/
 .venv/
 __pycache__/
 *.pyc
+
+# Frontend dependencies
+frontend/node_modules/
+
+# Frontend build output
+frontend/.next/

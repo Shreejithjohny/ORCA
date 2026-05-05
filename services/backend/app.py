@@ -1,13 +1,16 @@
 from fastapi import FastAPI, Request, HTTPException
-from services.nlp.chain import explain_incident_safe
+# from services.nlp.chain import explain_incident_safe
 from pydantic import BaseModel
 import os
 import asyncio
 import json
 
+def explain_incident_safe(incident):
+    return {"explanation": "Dummy response", "confidence": 0.5, "source": "dummy"}
+
 app = FastAPI(title="ORCA Backend (Member B - scaffold)")
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+REDIS_URL = os.getenv("REDIS_URL", "redis://orca-redis:6379/0")
 
 
 class LogPayload(BaseModel):
@@ -76,5 +79,5 @@ async def nlp_explain(body: dict):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("services.backend.app:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
 print("Backend loaded")
