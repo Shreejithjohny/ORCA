@@ -1,10 +1,10 @@
 import time
-from langchain_community.llms import Ollama
+from langchain_ollama import OllamaLLM
 from langchain_core.prompts import PromptTemplate
 
-from services.nlp.prompts import SYSTEM_PROMPT, USER_PROMPT
+from .prompts import SYSTEM_PROMPT, USER_PROMPT
 
-llm = Ollama(model="mistral")
+llm = OllamaLLM(model="mistral")
 
 prompt = PromptTemplate(
     template=SYSTEM_PROMPT + USER_PROMPT,

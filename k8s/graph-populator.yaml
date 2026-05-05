@@ -1,0 +1,121 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: graph-populator-code
+  namespace: orca
+data:
+  graph_populator.py: |
+    import asyncio
+    import json
+    import redis.asyncio as redis
+    from neo4j import AsyncGraphDatabase
+
+    REDIS_URL = "redis://orca-redis:6379/0"
+    NEO4J_URI = "bolt://orca-neo4j:7687"
+    NEO4J_USER = "neo4j"
+    NEO4J_PASSWORD = "OrcaSecure123"
+
+    async def run():
+        r = redis.from_url(REDIS_URL, decode_responses=True)
+        driver = AsyncGraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+
+        print("🚀 Graph Populator Started...")
+        while True:
+            try:
+                # Read warning incidents
+                for severity in ["warning", "critical"]:
+                    stream = f"incidents:{severity}"
+                    resp = await r.xread(streams={stream: "0-0"}, count=100, block=1000)
+                    
+                    if not resp:
+                        continue
+
+                    for _, messages in resp:
+                        for msg_id, data in messages:
+                            incident_json = data.get("data", "{}")
+                            incident = json.loads(incident_json)
+
+                            pod_name = incident.get("primary_pod", {}).get("name", "unknown")
+                            pod_ns = incident.get("primary_pod", {}).get("namespace", "default")
+                            severity_val = incident.get("severity", "unknown")
+                            confidence = incident.get("confidence", 0)
+
+                            # Create nodes and relationships in Neo4j
+                            async with driver.session() as session:
+                                await session.run(
+                                    """
+                                    MERGE (n:Pod {name: $pod_name, namespace: $pod_ns})
+                                    MERGE (i:Incident {id: $incident_id})
+                                    SET i.severity = $severity
+                                    SET i.confidence = $confidence
+                                    MERGE (n)-[:TRIGGERED]->(i)
+                                    RETURN n, i
+                                    """,
+                                    pod_name=pod_name,
+                                    pod_ns=pod_ns,
+                                    incident_id=incident.get("id", ""),
+                                    severity=severity_val,
+                                    confidence=confidence
+                                )
+
+                                print(f"📊 Added incident {incident.get('id', '')} for pod {pod_name}")
+                                
+                                # Mark as processed
+                                await r.xack(stream, "graph-group", msg_id)
+
+                await asyncio.sleep(5)
+            except Exception as e:
+                print(f"Error: {e}")
+                await asyncio.sleep(1)
+
+        await driver.close()
+
+    if __name__ == "__main__":
+        asyncio.run(run())
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graph-populator
+  namespace: orca
+  labels:
+    app: graph-populator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: graph-populator
+  template:
+    metadata:
+      labels:
+        app: graph-populator
+    spec:
+      containers:
+      - name: graph-populator
+        image: python:3.12-slim
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          pip install --no-cache-dir redis neo4j &&
+          python /app/graph_populator.py
+        env:
+        - name: REDIS_URL
+          value: "redis://orca-redis:6379/0"
+        - name: NEO4J_URI
+          value: "bolt://orca-neo4j:7687"
+        volumeMounts:
+        - name: graph-populator-code
+          mountPath: /app
+        resources:
+          limits:
+            memory: "256Mi"
+            cpu: "100m"
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+      volumes:
+      - name: graph-populator-code
+        configMap:
+          name: graph-populator-code
+          defaultMode: 0755

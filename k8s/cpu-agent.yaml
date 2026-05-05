@@ -1,0 +1,126 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cpu-agent-code
+  namespace: orca
+data:
+  cpu_agent.py: |
+    import asyncio
+    import json
+    import statistics
+    from collections import defaultdict, deque
+    import redis.asyncio as redis
+
+    REDIS_URL = "redis://orca-redis:6379/0"
+    STREAM = "metrics:default:web-pod:cpu"
+    GROUP = "cpu-agents"
+    CONSUMER = "cpu-agent-1"
+
+    WINDOW = 20
+    THRESHOLD = 1
+
+    windows = defaultdict(lambda: deque(maxlen=WINDOW))
+
+    async def setup(r):
+        try:
+            await r.xgroup_create(STREAM, GROUP, id="$", mkstream=True)
+        except:
+            pass
+
+    def z_score(values, new):
+        if len(values) < 5:
+            values.append(new)
+            return 0
+
+        mean = statistics.mean(values)
+        std = statistics.pstdev(values)
+        if std == 0:
+            return 0
+        return (new - mean) / std
+
+    async def run():
+        r = redis.from_url(REDIS_URL, decode_responses=True)
+        await setup(r)
+
+        print("🚀 CPU Agent Started...")
+        while True:
+            try:
+                resp = await r.xreadgroup(
+                    GROUP,
+                    CONSUMER,
+                    streams={STREAM: ">"},
+                    count=10,
+                    block=5000
+                )
+
+                if not resp:
+                    continue
+
+                for _, messages in resp:
+                    for msg_id, data in messages:
+                        pod = data.get("pod", "web-pod")
+                        cpu_val = float(data.get("value", 0))
+
+                        window = windows[pod]
+                        z = z_score(window, cpu_val)
+
+                        if z >= THRESHOLD:
+                            print(f"🔴 Anomaly detected: {pod} z={z:.2f}")
+                            await r.xadd(
+                                "anomalies:cpu",
+                                {"pod": pod, "z_score": str(z), "value": str(cpu_val)},
+                                maxlen=1000
+                            )
+
+                        await r.xack(STREAM, GROUP, msg_id)
+            except Exception as e:
+                print(f"Error: {e}")
+                await asyncio.sleep(1)
+
+    if __name__ == "__main__":
+        asyncio.run(run())
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cpu-agent
+  namespace: orca
+  labels:
+    app: cpu-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cpu-agent
+  template:
+    metadata:
+      labels:
+        app: cpu-agent
+    spec:
+      containers:
+      - name: cpu-agent
+        image: python:3.12-slim
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          pip install --no-cache-dir redis &&
+          python /app/cpu_agent.py
+        env:
+        - name: REDIS_URL
+          value: "redis://orca-redis:6379/0"
+        volumeMounts:
+        - name: cpu-agent-code
+          mountPath: /app
+        resources:
+          limits:
+            memory: "256Mi"
+            cpu: "100m"
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+      volumes:
+      - name: cpu-agent-code
+        configMap:
+          name: cpu-agent-code
+          defaultMode: 0755

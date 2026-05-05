@@ -1,0 +1,89 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: metrics-generator-code
+  namespace: orca
+data:
+  metrics_generator.py: |
+    import asyncio
+    import json
+    import random
+    import redis.asyncio as redis
+    import time
+
+    REDIS_URL = "redis://orca-redis:6379/0"
+    STREAM = "metrics:default:web-pod:cpu"
+
+    async def run():
+        r = redis.from_url(REDIS_URL, decode_responses=True)
+
+        print("🚀 Metrics Generator Started...")
+        base_cpu = 30
+        while True:
+            try:
+                # Generate normal CPU metrics
+                for _ in range(15):
+                    cpu_value = base_cpu + random.uniform(-5, 5)
+                    await r.xadd(
+                        STREAM,
+                        {"pod": "web-pod", "value": str(round(cpu_value, 2))},
+                        maxlen=1000
+                    )
+                    print(f"📊 Normal metric: {cpu_value:.2f}%")
+                    await asyncio.sleep(1)
+
+                # Generate anomaly spikes
+                for _ in range(5):
+                    cpu_value = 90 + random.uniform(0, 10)
+                    await r.xadd(
+                        STREAM,
+                        {"pod": "web-pod", "value": str(round(cpu_value, 2))},
+                        maxlen=1000
+                    )
+                    print(f"🔥 Spike metric: {cpu_value:.2f}%")
+                    await asyncio.sleep(1)
+
+                await asyncio.sleep(5)
+            except Exception as e:
+                print(f"Error: {e}")
+                await asyncio.sleep(1)
+
+    if __name__ == "__main__":
+        asyncio.run(run())
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: metrics-generator
+  namespace: orca
+spec:
+  template:
+    spec:
+      containers:
+      - name: metrics-generator
+        image: python:3.12-slim
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          pip install --no-cache-dir redis &&
+          python /app/metrics_generator.py
+        env:
+        - name: REDIS_URL
+          value: "redis://orca-redis:6379/0"
+        volumeMounts:
+        - name: metrics-generator-code
+          mountPath: /app
+        resources:
+          limits:
+            memory: "256Mi"
+            cpu: "100m"
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+      volumes:
+      - name: metrics-generator-code
+        configMap:
+          name: metrics-generator-code
+          defaultMode: 0755
+      restartPolicy: OnFailure
