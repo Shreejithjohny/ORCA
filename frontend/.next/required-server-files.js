@@ -104,7 +104,7 @@ self.__SERVER_FILES_MANIFEST={
         "transform": "lodash/{{member}}"
       }
     },
-    "outputFileTracingRoot": "D:\\HACKATHONS\\orca\\ORCA\\frontend",
+    "outputFileTracingRoot": "C:\\Users\\shree\\Documents\\ORCA\\frontend",
     "cacheComponents": false,
     "cacheLife": {
       "default": {
@@ -166,7 +166,7 @@ self.__SERVER_FILES_MANIFEST={
       "proxyPrefetch": "flexible",
       "optimisticClientCache": true,
       "manualClientBasePath": false,
-      "cpus": 31,
+      "cpus": 11,
       "memoryBasedWorkersCount": false,
       "imgOptConcurrency": null,
       "imgOptTimeoutInSeconds": 7,
@@ -304,11 +304,11 @@ self.__SERVER_FILES_MANIFEST={
     "bundlePagesRouterDependencies": false,
     "configFileName": "next.config.mjs",
     "turbopack": {
-      "root": "D:\\HACKATHONS\\orca\\ORCA\\frontend"
+      "root": "C:\\Users\\shree\\Documents\\ORCA\\frontend"
     },
     "distDirRoot": ".next"
   },
-  "appDir": "D:\\HACKATHONS\\orca\\ORCA\\frontend",
+  "appDir": "C:\\Users\\shree\\Documents\\ORCA\\frontend",
   "relativeAppDir": "",
   "files": [
     ".next\\routes-manifest.json",

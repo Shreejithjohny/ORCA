@@ -1,73 +1,94 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import type { Incident, IncidentFilter } from '@/types/orca';
-
-// Dummy incidents for development
-const DUMMY_INCIDENTS: Incident[] = [
-  {
-    id: 'INC-001',
-    severity: 'critical',
-    service: 'redis',
-    message: 'Memory spike detected - usage at 94%',
-    timestamp: new Date(Date.now() - 1000 * 60 * 2).toISOString(),
-    status: 'open',
-    affectedPods: ['redis-0', 'redis-1'],
-    confidence: 0.94,
-  },
-  {
-    id: 'INC-002',
-    severity: 'warning',
-    service: 'api',
-    message: 'High latency detected on /api/users endpoint',
-    timestamp: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
-    status: 'acknowledged',
-    affectedPods: ['api-pod-3'],
-    confidence: 0.87,
-  },
-  {
-    id: 'INC-003',
-    severity: 'critical',
-    service: 'neo4j',
-    message: 'Connection pool exhausted',
-    timestamp: new Date(Date.now() - 1000 * 60 * 8).toISOString(),
-    status: 'open',
-    affectedPods: ['neo4j-0'],
-    confidence: 0.92,
-  },
-  {
-    id: 'INC-004',
-    severity: 'warning',
-    service: 'backend',
-    message: 'CPU usage above threshold at 82%',
-    timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
-    status: 'open',
-    affectedPods: ['backend-pod-1', 'backend-pod-2'],
-    confidence: 0.78,
-  },
-  {
-    id: 'INC-005',
-    severity: 'healthy',
-    service: 'auth',
-    message: 'Service recovered - authentication latency normalized',
-    timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
-    status: 'resolved',
-    confidence: 0.95,
-  },
-];
+import { socketService } from '@/services/socket';
 
 export function useIncidents() {
-  const [incidents, setIncidents] = useState<Incident[]>(DUMMY_INCIDENTS);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
   const [filter, setFilter] = useState<IncidentFilter>('all');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const addIncident = useCallback((incident: Incident) => {
-    setIncidents(prev => [incident, ...prev]);
+  // Fetch incidents from backend
+  const fetchIncidents = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('http://localhost:8000/api/incidents');
+      if (!response.ok) throw new Error('Failed to fetch incidents');
+      const data = await response.json();
+      setIncidents(data.incidents || []);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error');
+      console.error('Error fetching incidents:', err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const updateIncident = useCallback((id: string, updates: Partial<Incident>) => {
-    setIncidents(prev =>
-      prev.map(inc => (inc.id === id ? { ...inc, ...updates } : inc))
-    );
+  // Fetch incidents on mount and subscribe to WebSockets
+  useEffect(() => {
+    fetchIncidents();
+    // Refresh every 10 seconds
+    const interval = setInterval(fetchIncidents, 10000);
+    
+    // Subscribe to WebSocket events for real-time updates
+    const unsubMessage = socketService.onMessage((event) => {
+      if (event.type === 'initial') {
+        if (Array.isArray(event.data) && event.data.length > 0) {
+          setIncidents(event.data);
+        }
+      } else if (event.type === 'incident_update') {
+        setIncidents(prev => {
+          // Check if incident already exists to update it, otherwise prepend
+          const exists = prev.some(inc => inc.id === event.data.id);
+          if (exists) {
+            return prev.map(inc => inc.id === event.data.id ? event.data : inc);
+          }
+          return [event.data, ...prev];
+        });
+      }
+    });
+
+    return () => {
+      clearInterval(interval);
+      unsubMessage();
+    };
+  }, [fetchIncidents]);
+
+  const addIncident = useCallback(async (incident: Incident) => {
+    try {
+      const response = await fetch('http://localhost:8000/api/incidents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(incident)
+      });
+      if (!response.ok) throw new Error('Failed to create incident');
+      const newIncident = await response.json();
+      setIncidents(prev => [newIncident, ...prev]);
+    } catch (err) {
+      console.error('Error creating incident:', err);
+      setError(err instanceof Error ? err.message : 'Unknown error');
+    }
+  }, []);
+
+  const updateIncident = useCallback(async (id: string, updates: Partial<Incident>) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/incidents/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+      if (!response.ok) throw new Error('Failed to update incident');
+      const updatedIncident = await response.json();
+      setIncidents(prev =>
+        prev.map(inc => (inc.id === id ? updatedIncident : inc))
+      );
+    } catch (err) {
+      console.error('Error updating incident:', err);
+      setError(err instanceof Error ? err.message : 'Unknown error');
+    }
   }, []);
 
   const clearIncidents = useCallback(() => {
@@ -95,5 +116,8 @@ export function useIncidents() {
     addIncident,
     updateIncident,
     clearIncidents,
+    loading,
+    error,
+    refetch: fetchIncidents,
   };
 }

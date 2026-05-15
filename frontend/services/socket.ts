@@ -16,6 +16,9 @@ class SocketService {
   private reconnectInterval: number = 3000;
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 5;
+  private connectHandlers: Set<() => void> = new Set();
+  private disconnectHandlers: Set<() => void> = new Set();
+  private messageListeners: Set<(event: SocketMessage) => void> = new Set();
 
   connect(url?: string): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -29,12 +32,14 @@ class SocketService {
         this.ws.onopen = () => {
           console.log(`[Socket] Connected to ${this.url}`);
           this.reconnectAttempts = 0;
+          this.connectHandlers.forEach(handler => handler());
           resolve();
         };
 
         this.ws.onmessage = (event: MessageEvent) => {
           try {
             const message: SocketMessage = JSON.parse(event.data);
+            this.messageListeners.forEach(listener => listener(message));
             const handler = this.messageHandlers.get(message.type);
             if (handler) {
               handler(message.data);
@@ -51,6 +56,7 @@ class SocketService {
 
         this.ws.onclose = () => {
           console.log('[Socket] Disconnected');
+          this.disconnectHandlers.forEach(handler => handler());
           this.attemptReconnect();
         };
       } catch (error) {
@@ -101,6 +107,27 @@ class SocketService {
       this.ws.close();
       this.ws = null;
     }
+  }
+
+  onMessage(handler: (event: SocketMessage) => void): () => void {
+    this.messageListeners.add(handler);
+    return () => {
+      this.messageListeners.delete(handler);
+    };
+  }
+
+  onConnect(handler: () => void): () => void {
+    this.connectHandlers.add(handler);
+    return () => {
+      this.connectHandlers.delete(handler);
+    };
+  }
+
+  onDisconnect(handler: () => void): () => void {
+    this.disconnectHandlers.add(handler);
+    return () => {
+      this.disconnectHandlers.delete(handler);
+    };
   }
 
   isConnected(): boolean {
