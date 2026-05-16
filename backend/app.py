@@ -7,8 +7,43 @@ from pydantic import BaseModel
 import json
 import asyncio
 import uuid
+import random
 
 app = FastAPI()
+
+async def simulate_incidents():
+    """Background task to simulate real-time incidents when Redis is not available"""
+    apps = ["api-server", "redis-cache", "payment-gateway", "auth-service", "database-primary"]
+    messages = [
+        "High CPU utilization detected (>90%)",
+        "Memory leak suspected - heap size growing",
+        "Connection timeout to upstream service",
+        "Elevated 5xx error rate",
+        "Disk space critical (<5% remaining)",
+        "Too many open files",
+        "Slow query detected (>5000ms)"
+    ]
+    while True:
+        await asyncio.sleep(random.randint(10, 20))
+        severity = random.choice(["warning", "critical"])
+        app_name = random.choice(apps)
+        new_incident = {
+            "id": f"INC-{str(uuid.uuid4())[:8].upper()}",
+            "severity": severity,
+            "service": app_name,
+            "message": random.choice(messages),
+            "timestamp": datetime.now().isoformat(),
+            "status": "open",
+            "affectedPods": [f"{app_name}-1", f"{app_name}-2"],
+            "confidence": round(random.uniform(0.7, 0.99), 2)
+        }
+        incidents_db.insert(0, new_incident)
+        await broadcast_incident(new_incident)
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(simulate_incidents())
+
 
 # Enable CORS for frontend communication
 app.add_middleware(
