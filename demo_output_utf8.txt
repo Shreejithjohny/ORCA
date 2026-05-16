@@ -1,0 +1,402 @@
+﻿
+[1m[96m
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ                  ORCA Platform - Interactive Demo                Γòæ
+Γòæ           Observability, Reliability, Correlation, Analysis      Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+[0m
+
+[1m[94m======================================================================[0m
+[1m[96mΓû║ DEMO 1: Backend API Endpoints[0m
+[1m[94m======================================================================[0m
+
+[96mΓä╣ The ORCA backend provides REST APIs for incident management and analysis
+[0m
+[93mHealth Check Endpoint:[0m
+[1mGET /health/llm[0m
+
+[92m{
+  "status": "ok",
+  "model": "mistral",
+  "available": false,
+  "uptime_seconds": 3847,
+  "version": "1.0.0"
+}[0m
+
+[92mΓ£ô Backend is responsive and healthy
+[0m
+[93mLog Ingestion Endpoint:[0m
+[1mPOST /ingest/logs[0m
+
+[94m{
+  "kubernetes": {
+    "namespace_name": "production",
+    "pod_name": "redis-cache-1",
+    "container_name": "redis"
+  },
+  "message": "Connection timeout to database",
+  "level": "ERROR",
+  "timestamp": "2026-05-06T00:36:23.471175"
+}[0m
+
+Response: [92m{
+  "status": "ok",
+  "stream": "logs:production:redis-cache-1",
+  "entries_received": 1
+}[0m
+
+[92mΓ£ô Logs ingested successfully
+[0m
+[93mIncident Analysis Endpoint:[0m
+[1mPOST /incident/explain[0m
+
+[94m{
+  "id": "INC-001",
+  "severity": "critical",
+  "service": "redis",
+  "message": "Memory usage at 94% - potential OOM condition",
+  "confidence": 0.94,
+  "timestamp": "2026-05-06T00:36:23.471237",
+  "affected_pods": [
+    "redis-cache-1",
+    "redis-cache-2"
+  ]
+}[0m
+
+Analysis: [92m{
+  "explanation": "Critical memory pressure detected on Redis cache cluster",
+  "confidence": 0.94,
+  "source": "llm_analyzer",
+  "recommendations": [
+    "Increase cache eviction policies",
+    "Monitor memory growth trend",
+    "Scale horizontally if needed",
+    "Check for memory leaks in client connections"
+  ]
+}[0m
+
+[92mΓ£ô Incident analyzed with recommendations
+[0m
+
+[1m[94m======================================================================[0m
+[1m[96mΓû║ DEMO 2: Redis Data Bus & Streams[0m
+[1m[94m======================================================================[0m
+
+[96mΓä╣ Redis acts as the central data bus for incident logs and network flows
+[0m
+[93mRedis Stream: Logs:[0m
+[1mXREAD COUNT 5 STREAMS logs:production:api-server 0[0m
+
+[96m[1] 2026-05-06T00:31:23.472017[0m
+    [93mWARNING: High latency detected: 2500ms response time[0m
+[96m[2] 2026-05-06T00:32:23.472486[0m
+    [93mWARNING: Connection pool exhausted, rejecting new requests[0m
+[96m[3] 2026-05-06T00:33:23.472500[0m
+    [93mERROR: Database query timeout after 30 seconds[0m
+[96m[4] 2026-05-06T00:34:23.472505[0m
+    [93mERROR: Service degradation - unable to process requests[0m
+[96m[5] 2026-05-06T00:35:23.472510[0m
+    [93mCRITICAL: Incident escalated - manual intervention required[0m
+
+[92mΓ£ô 5 log entries retrieved from Redis stream
+[0m
+[93mRedis Stream: Network Flows (eBPF traced):[0m
+[1mXREAD COUNT 3 STREAMS netflows:production:unknown 0[0m
+
+[96m[1] api-server.prod ΓåÆ postgres.prod:5432[0m
+    Protocol: TCP, Bytes: 4096
+[96m[2] api-server.prod ΓåÆ redis.prod:6379[0m
+    Protocol: TCP, Bytes: 1024
+[96m[3] redis.prod ΓåÆ backup-storage.prod:9200[0m
+    Protocol: TCP, Bytes: 8192
+
+[92mΓ£ô Network flows captured by eBPF
+[0m
+
+[1m[94m======================================================================[0m
+[1m[96mΓû║ DEMO 3: Neo4j Graph Database - Service Dependencies[0m
+[1m[94m======================================================================[0m
+
+[96mΓä╣ Neo4j stores the service topology and relationships
+[0m
+[93mCypher Query:[0m
+[1mMATCH (a:Service)-[r:CALLS]->(b:Service) RETURN a.name, r.latency_ms, b.name[0m
+
+[96mService Dependencies:[0m
+
+  [92mfrontend[0m --(50ms)--> [94mapi-gateway[0m
+  [92mapi-gateway[0m --(120ms)--> [94mauth-service[0m
+  [92mapi-gateway[0m --(150ms)--> [94muser-service[0m
+  [92muser-service[0m --(75ms)--> [94mpostgres[0m
+  [92muser-service[0m --(10ms)--> [94mredis[0m
+  [92mauth-service[0m --(20ms)--> [94mredis[0m
+  [92mapi-gateway[0m --(200ms)--> [94mnotification-service[0m
+  [92mnotification-service[0m --(5ms)--> [94mkafka[0m
+
+[93mCritical Dependency Analysis:[0m
+[1mMatch critical paths (latency > 100ms)[0m
+
+[91mCritical paths found: 3[0m
+
+  [91mALERT: api-gateway ΓåÆ auth-service (120ms)[0m
+  [91mALERT: api-gateway ΓåÆ user-service (150ms)[0m
+  [91mALERT: api-gateway ΓåÆ notification-service (200ms)[0m
+
+[92mΓ£ô Graph analysis complete - 3 critical paths identified
+[0m
+
+[1m[94m======================================================================[0m
+[1m[96mΓû║ DEMO 4: Incident Correlation & Root Cause Analysis[0m
+[1m[94m======================================================================[0m
+
+[96mΓä╣ ORCA correlates multiple signals to identify root causes
+[0m
+[93mScenario:[0m
+[1mService degradation detected across multiple components[0m
+
+[93mTimeline of Events:[0m
+
+  [94m14:23:10[0m [93m[WARNING][0m Redis memory usage spike (85% ΓåÆ 92%)
+  [94m14:23:35[0m [93m[WARNING][0m Database connection pool exhausted on API server
+  [94m14:24:05[0m [91m[ERROR][0m API response time > 5000ms
+  [94m14:24:20[0m [91m[CRITICAL][0m User facing errors - service degradation
+  [94m14:24:45[0m [96m[INFO][0m Auto-scaling triggered - adding 3 new API replicas
+  [94m14:25:30[0m [93m[WARNING][0m Memory still high (89%), cache eviction active
+  [94m14:26:15[0m [96m[INFO][0m Traffic shifted to new replicas
+  [94m14:27:00[0m [92m[SUCCESS][0m Service recovered - latency < 200ms
+
+[93mRoot Cause Analysis:[0m
+[1mLLM-powered incident investigation[0m
+
+{
+  "root_cause": "Memory leak in Redis client connection pooling",
+  "confidence": 0.87,
+  "contributing_factors": [
+    "High concurrent connections (1200+)",
+    "Connection timeout not releasing memory",
+    "Cumulative effect over 48 hours"
+  ],
+  "recommended_actions": [
+    "Update Redis client library to v4.5.2",
+    "Reduce connection pool timeout from 600s to 300s",
+    "Add memory monitoring alerts at 75% threshold",
+    "Schedule restart of Redis cache every 24 hours"
+  ],
+  "estimated_prevention": "Would prevent 95% of similar incidents"
+}
+
+[92mΓ£ô Root cause identified with confidence 0.87
+[0m
+
+[1m[94m======================================================================[0m
+[1m[96mΓû║ DEMO 5: Prometheus Metrics & Real-Time Monitoring[0m
+[1m[94m======================================================================[0m
+
+[96mΓä╣ Prometheus collects and aggregates system metrics
+[0m
+[93mAvailable Metrics:[0m
+[1mQuerying Prometheus for system health[0m
+
+[96mnode_cpu_seconds_total[0m
+  Query: rate(node_cpu_seconds_total[5m])
+    node1: 15%
+    node2: 28%
+    node3: 12%
+
+[96mnode_memory_MemAvailable_bytes[0m
+  Query: node_memory_MemAvailable_bytes / 1024 / 1024 / 1024
+    node1: 6.2GB
+    node2: 4.8GB
+    node3: 7.1GB
+
+[96mnode_disk_free_bytes[0m
+  Query: node_disk_free_bytes / 1024 / 1024 / 1024
+    node1: 120GB
+    node2: 95GB
+    node3: 150GB
+
+[96mkube_pod_info[0m
+  Query: count(kube_pod_info)
+    total_pods: 42
+    running: 40
+    pending: 2
+
+[92mΓ£ô Metrics retrieved successfully
+[0m
+
+[1m[94m======================================================================[0m
+[1m[96mΓû║ DEMO 6: Frontend Dashboard - Web UI Preview[0m
+[1m[94m======================================================================[0m
+
+[96mΓä╣ The Next.js dashboard provides real-time incident visualization
+[0m
+[1m[94mDashboard Sections:[0m
+
+[92mIncidents Tab[0m
+  Real-time incident feed
+    ΓÇó Live incident list with severity indicators
+    ΓÇó Sort by severity, time, affected service
+    ΓÇó Drill-down into incident details
+    ΓÇó Manual incident annotation and resolution
+
+[92mDashboard Tab[0m
+  System health overview
+    ΓÇó Service health status (OK/Warning/Critical)
+    ΓÇó Real-time metric graphs (CPU, Memory, I/O)
+    ΓÇó Top N slowest services
+    ΓÇó Error rate trends
+
+[92mGraph Tab[0m
+  Service dependency visualization
+    ΓÇó Interactive 3D service graph
+    ΓÇó Node sizing by traffic volume
+    ΓÇó Color-coded health status
+    ΓÇó Latency information on edges
+    ΓÇó Drill-down to service details
+
+[92mMetrics Tab[0m
+  Prometheus metrics explorer
+    ΓÇó Custom metric queries
+    ΓÇó Time-series graphs
+    ΓÇó Alert threshold configuration
+    ΓÇó Export data to CSV
+
+[92mSettings Tab[0m
+  Configuration management
+    ΓÇó LLM model selection
+    ΓÇó Alert threshold tuning
+    ΓÇó Integration configuration
+    ΓÇó User preferences
+
+[92mΓ£ô Dashboard provides comprehensive observability
+[0m
+
+[1m[94m======================================================================[0m
+[1m[96mΓû║ DEMO 7: Complete End-to-End Workflow[0m
+[1m[94m======================================================================[0m
+
+[96mΓä╣ Watch how ORCA processes an incident from detection to resolution
+[0m
+[1m[94mStep 1: eBPF Monitor[0m
+  Action:  Detects unusual network traffic pattern
+  [92mOutput:  1000 TCP connections from api-server to unknown host[0m
+
+[1m[94mStep 2: Backend /ingest/logs[0m
+  Action:  Receives pod logs via Fluent-bit
+  [92mOutput:  ERROR: Failed to establish database connection (10 times)[0m
+
+[1m[94mStep 3: Redis Streams[0m
+  Action:  Stores logs and network flows
+  [92mOutput:  logs:prod:api-server ΓåÆ 450 entries, netflows:prod:unknown ΓåÆ 1000 entries[0m
+
+[1m[94mStep 4: Neo4j Graph[0m
+  Action:  Finds critical dependency paths
+  [92mOutput:  api-server ΓåÆ database ΓåÆ backup-storage (critical path)[0m
+
+[1m[94mStep 5: NLP Analysis[0m
+  Action:  Correlates signals and determines root cause
+  [92mOutput:  Root cause: Database connection pool exhaustion (92% confidence)[0m
+
+[1m[94mStep 6: Prometheus[0m
+  Action:  Metrics confirm degradation
+  [92mOutput:  DB latency: 2500ms, Error rate: 15%, Response time: 8000ms[0m
+
+[1m[94mStep 7: Frontend Dashboard[0m
+  Action:  Incident visualized with recommendations
+  [92mOutput:  User sees incident details + auto-scaling recommendation[0m
+
+[1m[94mStep 8: Backend /incident/explain[0m
+  Action:  Provides actionable recommendations
+  [92mOutput:  Increase connection pool size from 100 to 200[0m
+
+[92mΓ£ô Complete incident detection ΓåÆ analysis ΓåÆ resolution cycle
+[0m
+
+[1m[94m======================================================================[0m
+[1m[96mΓû║ ORCA Platform Summary[0m
+[1m[94m======================================================================[0m
+
+
+[1mORCA Architecture Components:[0m
+
+1. [92meBPF Monitor[0m
+   ΓÇó Kernel-level network tracing
+   ΓÇó Zero-overhead TCP connection tracking
+   ΓÇó Real-time flow capture
+
+2. [92mFluent-bit Pipeline[0m
+   ΓÇó Log collection from all pods
+   ΓÇó Structured log processing
+   ΓÇó Forwarding to backend
+
+3. [92mRedis Data Bus[0m
+   ΓÇó High-speed event streaming
+   ΓÇó Distributed log storage
+   ΓÇó Network flow persistence
+
+4. [92mNeo4j Graph DB[0m
+   ΓÇó Service dependency mapping
+   ΓÇó Relationship analysis
+   ΓÇó Critical path identification
+
+5. [92mFastAPI Backend[0m
+   ΓÇó Log ingestion API
+   ΓÇó Incident analysis endpoints
+   ΓÇó Real-time WebSocket updates
+
+6. [92mPrometheus Monitoring[0m
+   ΓÇó System metric collection
+   ΓÇó Time-series data storage
+   ΓÇó Alert generation
+
+7. [92mLLM Analysis[0m
+   ΓÇó NLP-powered root cause analysis
+   ΓÇó Incident correlation
+   ΓÇó Recommendations generation
+
+8. [92mNext.js Dashboard[0m
+   ΓÇó Real-time incident visualization
+   ΓÇó Service dependency graphs
+   ΓÇó Metrics exploration
+
+[1mData Flow:[0m
+
+  Pods/Nodes
+      Γåô (logs, network flows, metrics)
+  eBPF + Fluent-bit
+      Γåô
+  Backend API
+      Γåô
+  Redis Streams + Neo4j + Prometheus
+      Γåô
+  LLM Analysis
+      Γåô
+  Dashboard + Alerts
+
+[1mKey Capabilities:[0m
+
+  Γ£ô Real-time incident detection
+  Γ£ô Automatic root cause analysis
+  Γ£ô Service dependency visualization
+  Γ£ô LLM-powered insights
+  Γ£ô Multi-signal correlation
+  Γ£ô Actionable recommendations
+  Γ£ô Zero-overhead tracing (eBPF)
+  Γ£ô Scalable to 1000+ services
+
+
+[1m[92mNext Steps:[0m
+
+1. Restart your computer (required for WSL2 to fully install)
+2. Open Ubuntu terminal
+3. Run: bash /mnt/c/Users/shree/Documents/ORCA/quick-setup-ubuntu.sh
+4. Wait 5-10 minutes for services to deploy
+5. Start port-forwarding in 4 terminal windows
+6. Access dashboard at http://localhost:3000
+
+[1m[92m
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ                    Demo Complete!                               Γòæ
+Γòæ                   Ready to Deploy ORCA                          Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+[0m

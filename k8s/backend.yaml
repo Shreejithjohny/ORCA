@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orca-backend
+  namespace: orca
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orca-backend
+  template:
+    metadata:
+      labels:
+        app: orca-backend
+    spec:
+      containers:
+        - name: orca-backend
+          image: python:3.11-slim
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - "pip install --no-cache-dir -r /app/services/backend/requirements.txt && python -m uvicorn app:app --host 0.0.0.0 --port 8000"
+          workingDir: /app/backend
+          env:
+            - name: REDIS_URL
+              value: "redis://orca-redis:6379/0"
+            - name: PYTHONPATH
+              value: "/app"
+            - name: OLLAMA_URL
+              value: "http://orca-ollama.orca.svc.cluster.local:11434"
+          ports:
+            - containerPort: 8000
+          volumeMounts:
+            - name: backend-code
+              mountPath: /app/backend
+            - name: services-code
+              mountPath: /app/services
+      volumes:
+        - name: backend-code
+          hostPath:
+            path: /mnt/c/Users/shree/Documents/ORCA/backend
+            type: Directory
+        - name: services-code
+          hostPath:
+            path: /mnt/c/Users/shree/Documents/ORCA/services
+            type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orca-backend
+  namespace: orca
+spec:
+  selector:
+    app: orca-backend
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP

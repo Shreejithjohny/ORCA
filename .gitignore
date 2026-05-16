@@ -1,0 +1,18 @@
+# Ignore ORCA playbook exports and Member A private artifacts
+ORCA_Master_Playbook_v2.docx
+docx_extracted.txt
+MEMBER_A_HANDOFF.md
+
+# Local cluster backups and transient scripts
+snapshots/
+
+# Python env
+.venv/
+__pycache__/
+*.pyc
+
+# Frontend dependencies
+frontend/node_modules/
+
+# Frontend build output
+frontend/.next/

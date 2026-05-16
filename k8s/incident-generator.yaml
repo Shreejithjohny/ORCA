@@ -1,0 +1,126 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: incident-generator-code
+  namespace: orca
+data:
+  incident_generator.py: |
+    import asyncio
+    import json
+    import uuid
+    import redis.asyncio as redis
+
+    REDIS_URL = "redis://orca-redis:6379/0"
+    STREAM = "anomalies:cpu"
+    GROUP = "incident-group"
+    CONSUMER = "incident-generator-1"
+
+    async def setup(r):
+        try:
+            await r.xgroup_create(STREAM, GROUP, id="$", mkstream=True)
+        except:
+            pass
+
+    def classify_severity(z_score):
+        if z_score >= 4:
+            return "critical"
+        return "warning"
+
+    async def run():
+        r = redis.from_url(REDIS_URL, decode_responses=True)
+        await setup(r)
+
+        print("🚀 Incident Generator Started...")
+        print("Waiting for anomaly...")
+        while True:
+            try:
+                resp = await r.xreadgroup(
+                    GROUP,
+                    CONSUMER,
+                    streams={STREAM: ">"},
+                    count=10,
+                    block=5000
+                )
+
+                if not resp:
+                    continue
+
+                for _, messages in resp:
+                    for msg_id, data in messages:
+                        z_score_val = float(data.get("z_score", 0))
+
+                        print("📥 Anomaly Received:", data)
+
+                        severity = classify_severity(z_score_val)
+
+                        incident = {
+                            "id": str(uuid.uuid4()),
+                            "severity": severity,
+                            "confidence": round(min(z_score_val / 5, 1), 2),
+                            "primary_pod": {
+                                "namespace": "default",
+                                "name": data.get("pod", "unknown")
+                            },
+                            "summary": "High CPU anomaly detected"
+                        }
+
+                        await r.xadd(
+                            f"incidents:{severity}",
+                            {"data": json.dumps(incident)},
+                            maxlen=1000
+                        )
+
+                        print("🚨 INCIDENT CREATED:", incident)
+
+                        await r.xack(STREAM, GROUP, msg_id)
+            except Exception as e:
+                print(f"Error: {e}")
+                await asyncio.sleep(1)
+
+    if __name__ == "__main__":
+        asyncio.run(run())
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: incident-generator
+  namespace: orca
+  labels:
+    app: incident-generator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: incident-generator
+  template:
+    metadata:
+      labels:
+        app: incident-generator
+    spec:
+      containers:
+      - name: incident-generator
+        image: python:3.12-slim
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          pip install --no-cache-dir redis &&
+          python /app/incident_generator.py
+        env:
+        - name: REDIS_URL
+          value: "redis://orca-redis:6379/0"
+        volumeMounts:
+        - name: incident-generator-code
+          mountPath: /app
+        resources:
+          limits:
+            memory: "256Mi"
+            cpu: "100m"
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+      volumes:
+      - name: incident-generator-code
+        configMap:
+          name: incident-generator-code
+          defaultMode: 0755
