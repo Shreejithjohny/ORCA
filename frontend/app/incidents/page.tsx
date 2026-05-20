@@ -9,6 +9,7 @@ import { FilterTabs } from '@/components/orca/filter-tabs';
 import { SeverityBadge } from '@/components/orca/severity-badge';
 import { ConfidenceScore } from '@/components/orca/confidence-score';
 import { AIChatPanel } from '@/components/orca/ai-chat-panel';
+import { Button } from '@/components/ui/button';
 import { useIncidents } from '@/hooks/useIncidents';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { formatDistanceToNow } from 'date-fns';
@@ -23,7 +24,7 @@ import {
 
 export default function IncidentsPage() {
   const { isConnected } = useWebSocket();
-  const { incidents, allIncidents, filter, setFilter } = useIncidents();
+  const { incidents, allIncidents, filter, setFilter, updateIncident } = useIncidents();
   const [search, setSearch] = useState('');
   const [chatOpen, setChatOpen] = useState(false);
 
@@ -66,7 +67,7 @@ export default function IncidentsPage() {
         {/* Table */}
         <div className="rounded-lg border bg-card">
           <Table>
-            <TableHeader>
+              <TableHeader>
               <TableRow>
                 <TableHead>ID</TableHead>
                 <TableHead>Severity</TableHead>
@@ -74,13 +75,14 @@ export default function IncidentsPage() {
                 <TableHead className="hidden md:table-cell">Message</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="hidden lg:table-cell">Confidence</TableHead>
+                <TableHead>Actions</TableHead>
                 <TableHead className="text-right">Time</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredIncidents.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground">
                     No incidents found
                   </TableCell>
                 </TableRow>
@@ -111,6 +113,26 @@ export default function IncidentsPage() {
                     <TableCell className="hidden lg:table-cell">
                       {incident.confidence && (
                         <ConfidenceScore score={incident.confidence} />
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {incident.status !== 'resolved' ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            try {
+                              await updateIncident(incident.id, { status: 'resolved' });
+                            } catch (err) {
+                              console.error('Failed to resolve incident', err);
+                            }
+                          }}
+                        >
+                          Resolve
+                        </Button>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">Resolved</span>
                       )}
                     </TableCell>
                     <TableCell className="text-right text-sm text-muted-foreground" suppressHydrationWarning>

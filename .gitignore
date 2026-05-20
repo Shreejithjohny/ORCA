@@ -16,3 +16,6 @@ frontend/node_modules/
 
 # Frontend build output
 frontend/.next/
+
+# Local environment file (may contain secrets)
+.env
