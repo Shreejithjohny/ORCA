@@ -7,7 +7,7 @@ from langchain_core.prompts import PromptTemplate
 
 from .prompts import SYSTEM_PROMPT, USER_PROMPT
 
-MODEL_NAME = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.1-8b-instruct:free")
+MODEL_NAME = os.getenv("OPENROUTER_MODEL", "gpt-4o-mini")
 API_KEY = os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY")
 BASE_URL = os.getenv("OPENROUTER_BASE_URL", os.getenv("OPENAI_API_BASE", "https://openrouter.ai/api/v1"))
 client = None
