@@ -15,12 +15,9 @@ spec:
     spec:
       containers:
         - name: orca-backend
-          image: python:3.11-slim
+          # Replace <registry> with your container registry (e.g. ghcr.io/your-org/orca-backend:latest)
+          image: <registry>/orca-backend:latest
           imagePullPolicy: IfNotPresent
-          command: ["/bin/sh", "-c"]
-          args:
-            - "pip install --no-cache-dir -r /app/services/backend/requirements.txt && python -m uvicorn app:app --host 0.0.0.0 --port 8000"
-          workingDir: /app/backend
           env:
             - name: REDIS_URL
               value: "redis://orca-redis:6379/0"
@@ -30,20 +27,10 @@ spec:
               value: "http://orca-ollama.orca.svc.cluster.local:11434"
           ports:
             - containerPort: 8000
-          volumeMounts:
-            - name: backend-code
-              mountPath: /app/backend
-            - name: services-code
-              mountPath: /app/services
-      volumes:
-        - name: backend-code
-          hostPath:
-            path: /mnt/c/Users/shree/Documents/ORCA/backend
-            type: Directory
-        - name: services-code
-          hostPath:
-            path: /mnt/c/Users/shree/Documents/ORCA/services
-            type: Directory
+          workingDir: /app
+          # If you need runtime configuration, mount a ConfigMap or Secret and set envFrom
+          # volumeMounts: []
+      # volumes: []
 ---
 apiVersion: v1
 kind: Service

@@ -8,8 +8,11 @@ import json
 import asyncio
 import uuid
 import random
+import os
 
 app = FastAPI()
+
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
 async def simulate_incidents():
     """Background task to simulate real-time incidents when Redis is not available"""
@@ -202,3 +205,78 @@ async def broadcast_incident(incident: Dict):
             print(f"Failed to send to client: {e}")
             if client in connected_clients:
                 connected_clients.remove(client)
+
+
+def _normalize_status(severity_values: list[str]) -> str:
+    if any(value == "critical" for value in severity_values):
+        return "critical"
+    if any(value == "warning" for value in severity_values):
+        return "warning"
+    if severity_values:
+        return severity_values[0]
+    return "unknown"
+
+
+async def _graph_from_redis() -> dict:
+    nodes: dict[str, dict] = {}
+    links: list[dict] = []
+    r = None
+    try:
+        import redis.asyncio as redis_async
+
+        r = redis_async.from_url(REDIS_URL, decode_responses=True)
+        for severity in ("warning", "critical"):
+            stream = f"incidents:{severity}"
+            entries = await r.xrevrange(stream, count=50)
+            for _, fields in entries:
+                raw = fields.get("data") or fields.get("event")
+                if not raw:
+                    continue
+                try:
+                    incident = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
+
+                incident_id = incident.get("id")
+                pod = (incident.get("primary_pod") or {}).get("name") or incident.get("service") or incident.get("pod") or "unknown"
+                pod_status = incident.get("severity", severity)
+                nodes[pod] = {"id": pod, "status": pod_status}
+
+                if incident_id:
+                    nodes[incident_id] = {"id": incident_id, "status": pod_status}
+                    links.append({"source": pod, "target": incident_id})
+    except Exception:
+        return {"nodes": [], "links": []}
+    finally:
+        if r is not None:
+            try:
+                await r.aclose()
+            except Exception:
+                pass
+
+    return {"nodes": list(nodes.values()), "links": links}
+
+
+def _graph_from_incidents_db() -> dict:
+    nodes: dict[str, dict] = {}
+    links: list[dict] = []
+
+    for incident in incidents_db:
+        service = incident.get("service") or "unknown"
+        incident_id = incident.get("id")
+        severity = incident.get("severity", "unknown")
+        nodes[service] = {"id": service, "status": severity}
+
+        if incident_id:
+            nodes[incident_id] = {"id": incident_id, "status": severity}
+            links.append({"source": service, "target": incident_id})
+
+    return {"nodes": list(nodes.values()), "links": links}
+
+
+@app.get("/graph")
+async def graph():
+    data = await _graph_from_redis()
+    if data["nodes"] or data["links"]:
+        return data
+    return _graph_from_incidents_db()
